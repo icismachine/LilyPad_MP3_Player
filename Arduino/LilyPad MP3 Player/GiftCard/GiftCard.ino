@@ -54,6 +54,8 @@
 #include <SdFat.h>          // SD card file system
 #include <SFEMP3Shield.h>   // MP3 decoder chip
 
+
+#define VOLUME_DEFAULT 20
 // Constants for the trigger input pins, which we'll place
 // in an array for convenience:
 #define TRIGGERS 1
@@ -92,11 +94,11 @@ boolean interrupt = true;
 // file will NOT start the file over. However, a different trigger
 // WILL stop the original file and start a new one.
 
-boolean interruptself = false;
+boolean interruptself = true;
 
 // We'll store the five filenames as arrays of characters.
 // "Short" (8.3) filenames are used, followed by a null character.
-#define AUDIO_FILES 5
+#define AUDIO_FILES 10
 char filename[AUDIO_FILES][13];
 
 void SetupGPIOs()
@@ -198,12 +200,21 @@ void ScanForAudioFiles()
       index--;
       
       // Copy the data to our filename array.
-
-      strcpy(filename[index],tempfilename);
-  
-      if (debugging) // Print out file number and name
+      if(index < AUDIO_FILES)
       {
-        Serial.print(F("found a file with a leading "));
+        strcpy(filename[index],tempfilename);
+    
+        if (debugging) // Print out file number and name
+        {
+          Serial.print(F("found a file with a leading "));
+          Serial.print(index+1);
+          Serial.print(F(": "));
+          Serial.println(filename[index]);
+        }
+      }
+      else
+      {
+        Serial.print(F("file out of bounds with AUDIO_FILE size "));
         Serial.print(index+1);
         Serial.print(F(": "));
         Serial.println(filename[index]);
@@ -256,20 +267,22 @@ void setup()
   ScanForAudioFiles();
   
   // Set the VS1053 volume. 0 is loudest, 255 is lowest (off):
-
-  MP3player.setVolume(10,10);
+  MP3player.setMonoMode(1);
+  MP3player.setVolume(VOLUME_DEFAULT,VOLUME_DEFAULT);
   
   // Turn on the amplifier chip:
   
   digitalWrite(EN_GPIO1,HIGH);
   delay(2);
+  
+  randomSeed(analogRead(1));
 }
 
 
 void loop()
 {
   int CurrentIndex = 0;
-  static int last_t;  // previous (playing) trigger
+  static int last_t = -1;  // previous (playing) trigger
   int x;
   byte result;
 
@@ -303,14 +316,20 @@ void loop()
 
       // Do we have a valid filename for this trigger?
       // (Invalid filenames will have 0 as the first character)
-
-      if (filename[0][0] == 0)
+      CurrentIndex = random(0,AUDIO_FILES);
+              
+      if (filename[CurrentIndex][0] == 0)
       {
         if (debugging)
-          Serial.println(F("no file with that number"));
+        {
+          Serial.print(F("no file with that number "));
+          Serial.println(CurrentIndex);
+        }
       }
       else // We do have a filename for this trigger!
       {
+      	if (debugging)
+          Serial.println(F("Playing"));
         // If a file is already playing, and we've chosen to
         // allow playback to be interrupted by a new trigger,
         // stop the playback before playing the new file.
@@ -321,16 +340,35 @@ void loop()
             Serial.println(F("stopping playback"));
 
           MP3player.stopTrack();
+          
+          result = MP3player.isPlaying();
+          if((debugging) &&(result != 0))
+          {
+            Serial.print(F("error "));
+            Serial.print(result);
+            Serial.println(F(" when trying to stop track "));
+          }
+        }
+        else{
+          if(debugging)
+          {
+            Serial.print(F("no turn off due to "));
+            Serial.print(MP3player.isPlaying());
+            Serial.print(F(" Cur "));
+            Serial.print(CurrentIndex);
+            Serial.print(F(" last "));
+            Serial.println(last_t);
+          }
         }
 
         // Play the filename associated with the trigger number.
         // (If a file is already playing, this command will fail
         //  with error #2).
         // Our Change
-        CurrentIndex = rand()%AUDIO_FILES;
         result = MP3player.playMP3(filename[CurrentIndex]);
         
-        if (result == 0) last_t = CurrentIndex;  // Save playing trigger
+        if (result == 0) 
+          last_t = CurrentIndex;  // Save playing trigger
   
         if(debugging)
         {
@@ -348,7 +386,7 @@ void loop()
         }
       }
     }
-  
+
 }
 
 
