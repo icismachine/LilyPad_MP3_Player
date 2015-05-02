@@ -55,7 +55,9 @@
 #include <SFEMP3Shield.h>   // MP3 decoder chip
 
 
+
 #define VOLUME_DEFAULT 20
+
 // Constants for the trigger input pins, which we'll place
 // in an array for convenience:
 #define TRIGGERS 1
